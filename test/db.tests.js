@@ -546,48 +546,53 @@ describe('LimitDBRedis', () => {
     it('should take correct skipped amount from redis', (done) => {
       const params = { type: 'global',  key: 'skipOne'};
 
-      // skip 1
-      // size 3
+      // size = 3
       // no refill
-
       async.series([
         (cb) => db.get(params, (_, {remaining}) => { assert.equal(remaining, 3); cb(); }),
 
-        // call 1 - redis - conformant
-        (cb) => db.take(params, cb), // redis - take 1
-        (cb) => db.get(params, (_, {remaining}) => { assert.equal(remaining, 2); cb(); }),
-
-        // call 2 - skipped - conformant
-        (cb) => db.take(params, cb), // skipped
-        (cb) => db.get(params, (_, {remaining}) => { assert.equal(remaining, 2); cb(); }),
-
-        // call 3 - redis - conformant
-        // takes 2 here, 1 for current call and one for previously skipped call
-        (cb) => db.take(params, cb),
-        (cb) => db.get(params, (_, {remaining}) => { assert.equal(remaining, 0); cb(); }),
-
-        // Note: this is the margin of error introduced by skip_n_calls
-        // call 4 - skipped - conformant
-        (cb) => db.take(params, cb), // skipped
-        (cb) => {
-          assert.ok(db.callCounts.get('global:skipOne').res.conformant);
+        // call 1 - redis
+        // takes 1 token
+        (cb) => db.take(params, (_, { remaining, conformant }) => {
+          assert.equal(remaining, 2);
+          assert.ok(conformant)
           cb();
-        },
+        }),
 
-        // call 5 - redis - non-conformant
-        (cb) => db.take(params, (_, { conformant }) => {
+        // call 2 - skipped
+        (cb) => db.take(params, (_, { remaining, conformant }) => {
+          assert.equal(remaining, 2);
+          assert.ok(conformant)
+          cb();
+        }),
+
+        // call 3 - redis
+        // takes 2 tokens here, 1 for current call and one for previously skipped call
+        (cb) => db.take(params, (_, { remaining, conformant }) => {
+          assert.equal(remaining, 0);
+          assert.ok(conformant)
+          cb();
+        }),
+
+        // call 4 - skipped
+        // Note: this is the margin of error introduced by skip_n_calls. Without skip_n_calls, this call would be
+        // non-conformant.
+        (cb) => db.take(params, (_, { remaining, conformant }) => {
+          assert.equal(remaining, 0);
+          assert.ok(conformant);
+          cb();
+        }),
+
+        // call 5 - redis
+        (cb) => db.take(params, (_, { remaining, conformant }) => {
+          assert.equal(remaining, 0);
           assert.notOk(conformant);
           cb();
         }),
-        (cb) => {
-          assert.notOk(db.callCounts.get('global:skipOne').res.conformant);
-          cb();
-        },
       ], (err, _results) => {
         if (err) {
           return done(err);
         }
-
         done();
       })
     });
