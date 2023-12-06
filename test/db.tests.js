@@ -66,7 +66,12 @@ const buckets = {
         size: 3,
         per_hour: 3
       },
-      skipOne: {
+      skipOneSize10: {
+        skip_n_calls: 1,
+        size: 10,
+        per_hour: 0
+      },
+      skipOneSize3: {
         skip_n_calls: 1,
         size: 3,
         per_hour: 0
@@ -543,89 +548,131 @@ describe('LimitDBRedis', () => {
       });
     });
 
-    it('should take correct skipped amount from redis', (done) => {
-      const params = { type: 'global',  key: 'skipOne'};
+    describe('skip calls', () => {
+      it('should skip calls', (done) => {
+        const params = { type: 'global',  key: 'skipit'};
 
-      // size = 3
-      // no refill
-      async.series([
-        (cb) => db.get(params, (_, {remaining}) => { assert.equal(remaining, 3); cb(); }),
+        async.series([
+          (cb) => db.take(params, cb), // redis
+          (cb) => db.take(params, cb), // cache
+          (cb) => db.take(params, cb), // cache
+          (cb) => {
+            assert.equal(db.callCounts.get('global:skipit').count, 2);
+            cb();
+          },
+          (cb) => db.take(params, cb), // redis
+          (cb) => db.take(params, cb), // cache
+          (cb) => db.take(params, cb), // cache
+          (cb) => db.take(params, cb), // redis (first nonconformant)
+          (cb) => db.take(params, cb), // cache (first cached)
+          (cb) => {
+            assert.equal(db.callCounts.get('global:skipit').count, 1);
+            assert.notOk(db.callCounts.get('global:skipit').res.conformant);
+            cb();
+          },
+        ], (err, _results) => {
+          if (err) {
+            return done(err);
+          }
 
-        // call 1 - redis
-        // takes 1 token
-        (cb) => db.take(params, (_, { remaining, conformant }) => {
-          assert.equal(remaining, 2);
-          assert.ok(conformant)
-          cb();
-        }),
+          done();
+        })
+      });
 
-        // call 2 - skipped
-        (cb) => db.take(params, (_, { remaining, conformant }) => {
-          assert.equal(remaining, 2);
-          assert.ok(conformant)
-          cb();
-        }),
+      it('should take correct number of tokens for skipped calls with single count', (done) => {
+        const params = { type: 'global',  key: 'skipOneSize3'};
 
-        // call 3 - redis
-        // takes 2 tokens here, 1 for current call and one for previously skipped call
-        (cb) => db.take(params, (_, { remaining, conformant }) => {
-          assert.equal(remaining, 0);
-          assert.ok(conformant)
-          cb();
-        }),
+        // size = 3
+        // skip_n_calls = 1
+        // no refill
+        async.series([
+          (cb) => db.get(params, (_, {remaining}) => { assert.equal(remaining, 3); cb(); }),
 
-        // call 4 - skipped
-        // Note: this is the margin of error introduced by skip_n_calls. Without skip_n_calls, this call would be
-        // non-conformant.
-        (cb) => db.take(params, (_, { remaining, conformant }) => {
-          assert.equal(remaining, 0);
-          assert.ok(conformant);
-          cb();
-        }),
+          // call 1 - redis
+          // takes 1 token
+          (cb) => db.take(params, (_, { remaining, conformant }) => {
+            assert.equal(remaining, 2);
+            assert.ok(conformant)
+            cb();
+          }),
 
-        // call 5 - redis
-        (cb) => db.take(params, (_, { remaining, conformant }) => {
-          assert.equal(remaining, 0);
-          assert.notOk(conformant);
-          cb();
-        }),
-      ], (err, _results) => {
-        if (err) {
-          return done(err);
-        }
-        done();
-      })
-    });
+          // call 2 - skipped
+          (cb) => db.take(params, (_, { remaining, conformant }) => {
+            assert.equal(remaining, 2);
+            assert.ok(conformant)
+            cb();
+          }),
 
-    it('should skip calls', (done) => {
-      const params = { type: 'global',  key: 'skipit'};
+          // call 3 - redis
+          // takes 2 tokens here, 1 for current call and one for previously skipped call
+          (cb) => db.take(params, (_, { remaining, conformant }) => {
+            assert.equal(remaining, 0);
+            assert.ok(conformant)
+            cb();
+          }),
 
-      async.series([
-        (cb) => db.take(params, cb), // redis
-        (cb) => db.take(params, cb), // cache
-        (cb) => db.take(params, cb), // cache
-        (cb) => {
-          assert.equal(db.callCounts.get('global:skipit').count, 2);
-          cb();
-        },
-        (cb) => db.take(params, cb), // redis
-        (cb) => db.take(params, cb), // cache
-        (cb) => db.take(params, cb), // cache
-        (cb) => db.take(params, cb), // redis (first nonconformant)
-        (cb) => db.take(params, cb), // cache (first cached)
-        (cb) => {
-          assert.equal(db.callCounts.get('global:skipit').count, 1);
-          assert.notOk(db.callCounts.get('global:skipit').res.conformant);
-          cb();
-        },
-      ], (err, _results) => {
-        if (err) {
-          return done(err);
-        }
+          // call 4 - skipped
+          // Note: this is the margin of error introduced by skip_n_calls. Without skip_n_calls, this call would be
+          // non-conformant.
+          (cb) => db.take(params, (_, { remaining, conformant }) => {
+            assert.equal(remaining, 0);
+            assert.ok(conformant);
+            cb();
+          }),
 
-        done();
-      })
-    });
+          // call 5 - redis
+          (cb) => db.take(params, (_, { remaining, conformant }) => {
+            assert.equal(remaining, 0);
+            assert.notOk(conformant);
+            cb();
+          }),
+        ], (err, _results) => {
+          if (err) {
+            return done(err);
+          }
+          done();
+        })
+      });
+
+      it('should take correct number of tokens for skipped calls with multi count', (done) => {
+        const params = { type: 'global',  key: 'skipOneSize10', count: 2};
+
+        // size = 10
+        // skip_n_calls = 1
+        // no refill
+        async.series([
+          (cb) => db.get(params, (_, {remaining}) => { assert.equal(remaining, 10); cb(); }),
+
+          // call 1 - redis
+          // takes 2 tokens
+          (cb) => db.take(params, (_, { remaining, conformant }) => {
+            assert.equal(remaining, 8);
+            assert.ok(conformant)
+            cb();
+          }),
+
+          // call 2 - skipped
+          (cb) => db.take(params, (_, { remaining, conformant }) => {
+            assert.equal(remaining, 8);
+            assert.ok(conformant)
+            cb();
+          }),
+
+          // call 3 - redis
+          // takes 4 tokens here, 2 for current call and 2 for previously skipped call
+          (cb) => db.take(params, (_, { remaining, conformant }) => {
+            assert.equal(remaining, 4);
+            assert.ok(conformant)
+            cb();
+          }),
+        ], (err, _results) => {
+          if (err) {
+            return done(err);
+          }
+          done();
+        })
+      });
+    })
   });
 
   describe('PUT', () => {
