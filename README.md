@@ -113,6 +113,7 @@ overrides: {
 
 ## ERL (Elevated Rate Limits)
 ERL is a feature that allows you to define a different set of limits that kick in when the bucket is empty.
+To be able to allow its use within limitd-redis, you need to set the `allowERL` to `true`
 You can configure elevated limits inside your type definitions as follows:
 
 ```js
@@ -147,9 +148,10 @@ limitd.take(type, key, [count], (err, result) => {
 -  `key`: the identifier of the bucket.
 -  `count`: the amount of tokens you need. This is optional and the default is 1.
 -  `configOverride`: caller-provided bucket configuration for this operation
--  `erlIsActiveKey`: the identifier of the ERL activation for the bucket. Must be passed for buckets that have ERL configured.
-The result object has:
+-  `erlIsActiveKey`: (string) the identifier of the ERL activation for the bucket. Must be passed for buckets that have ERL configured.
+-  `allowERL`: (boolean = false) if set to true, the ERL feature will be allowed to be used. Default is false.
 
+The result object has:
 -  `conformant` (boolean): true if the requested amount is conformant to the limit.
 -  `remaining` (int): the amount of remaining tokens in the bucket.
 -  `reset` (int / unix timestamp): unix timestamp of the date when the bucket will be full again.
