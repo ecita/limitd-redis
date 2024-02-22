@@ -52,7 +52,8 @@ Buckets:
 - `per_interval` (number): is the amount of tokens that the bucket receive on every interval.
 - `interval` (number): defines the interval in milliseconds.
 - `unlimited` (boolean = false): unlimited requests (skip take).
-- `skip_n_calls` (number): take will go to redis every `n` calls instead of going in every take. 
+- `skip_n_calls` (number): take will go to redis every `n` calls instead of going in every take.
+- `elevated_limits` (object): elevated limits configuration that kick in when the bucket is empty. Consider it overrides that kick in when the bucket is empty.
 
 Ping:
 
@@ -127,13 +128,14 @@ limitd.take(type, key, [count], (err, result) => {
 -  `key`: the identifier of the bucket.
 -  `count`: the amount of tokens you need. This is optional and the default is 1.
 -  `configOverride`: caller-provided bucket configuration for this operation
-
+-  `erlIsActiveKey`: the identifier of the ERL activation for the bucket. Must be passed for buckets that have ERL configured.
 The result object has:
 
 -  `conformant` (boolean): true if the requested amount is conformant to the limit.
 -  `remaining` (int): the amount of remaining tokens in the bucket.
 -  `reset` (int / unix timestamp): unix timestamp of the date when the bucket will be full again.
 -  `limit` (int): the size of the bucket.
+-  `erl_activated` (boolean): true if the bucket has ERL activated at the time of the request. Only returned for buckets that have ERL configured.
 
 ## PUT
 
