@@ -6,6 +6,7 @@ const LimitDB  = require('../lib/db');
 const assert   = require('chai').assert;
 const {Toxiproxy, Toxic} = require('toxiproxy-node-client');
 const crypto  = require('crypto')
+const {ERL_DEFAULT_ACTIVATION_PERIOD_MINUTES} = require("../lib/utils");
 
 const buckets = {
   ip: {
@@ -866,7 +867,7 @@ describe('LimitDBRedis', () => {
               erlIsActiveKey: 'some_erl_active_identifier'
             }))
             .then(() => db.redis.ttl('some_erl_active_identifier', (err, ttl) => {
-              assert.equal(ttl, 900); // 15 minutes in seconds
+              assert.equal(ttl, 60*ERL_DEFAULT_ACTIVATION_PERIOD_MINUTES); // 15 minutes in seconds
               done()
             }))
       });
@@ -878,7 +879,7 @@ describe('LimitDBRedis', () => {
           elevated_limits: {
             size: 10,
             per_minute: 1,
-            activation_period_minutes: 20,
+            erl_activation_period_mins: 20,
           }
         });
         takeElevatedPromise({type: bucketName, key: 'some_key', erlIsActiveKey: 'some_erl_active_identifier'})
