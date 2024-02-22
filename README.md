@@ -53,7 +53,7 @@ Buckets:
 - `interval` (number): defines the interval in milliseconds.
 - `unlimited` (boolean = false): unlimited requests (skip take).
 - `skip_n_calls` (number): take will go to redis every `n` calls instead of going in every take.
-- `elevated_limits` (object): elevated limits configuration that kick in when the bucket is empty. Consider it overrides that kick in when the bucket is empty.
+- `elevated_limits` (object): elevated limits configuration that kick in when the bucket is empty. Consider it as an override that kick in when the bucket is empty.
 
 Ping:
 
@@ -67,6 +67,7 @@ If you omit `size`, limitdb assumes that `size` is the value of `per_interval`. 
 
 If you don't specify a filling rate with `per_interval` or any other `per_x`, the bucket is fixed and you have to manually reset it using `PUT`.
 
+## Overrides
 You can also define `overrides` inside your type definitions as follows:
 
 ```js
@@ -106,6 +107,24 @@ overrides: {
     size:       100,
     per_second: 50,
     until:      new Date(2016, 4, 1)
+  }
+}
+```
+
+## ERL (Elevated Rate Limits)
+ERL is a feature that allows you to define a different set of limits that kick in when the bucket is empty.
+You can configure elevated limits inside your type definitions as follows:
+
+```js
+buckets = {
+  ip: {
+    size: 10,
+    per_second: 5,
+    elevated_limits: {
+      size: 100, // new bucket size. already used tokens will be deducted from current bucket content upon ERL activation.
+      per_second: 50, // new bucket refill ate
+      erl_activation_period_mins: 5, // for how long the ERL configuration should remain active
+    }
   }
 }
 ```
