@@ -44,7 +44,7 @@ local enough_tokens = new_content >= tokens_to_take
 -- https://redis.io/docs/interact/programmability/eval-intro/#:~:text=scripts%20debugger.-,Script%20replication,-In%20standalone%20deployments
 redis.replicate_commands()
 
-if enough_tokens and is_erl_activated==0 then
+if enough_tokens and is_erl_activated == 0 then
     new_content = math.min(new_content - tokens_to_take, bucket_size)
 else
     -- use erl
