@@ -47,36 +47,52 @@ end
 redis.replicate_commands()
 
 -- calculate new bucket content
-local new_content = calculateNewBucketContent(current, tokens_per_ms, bucket_size, current_timestamp_ms)
-local enough_tokens = new_content >= tokens_to_take
-if enough_tokens and is_erl_activated==0 then
-    new_content = math.min(new_content - tokens_to_take, bucket_size)
+local bucket_content_after_refill
+if is_erl_activated==1 then
+    bucket_content_after_refill = calculateNewBucketContent(current, erl_tokens_per_ms, erl_bucket_size, current_timestamp_ms)
 else
-    -- calculate new bucket content based on elevated rate limits
-    new_content = calculateNewBucketContent(current, erl_tokens_per_ms, erl_bucket_size, current_timestamp_ms)
-    -- if activating erl for first time, refill the bucket with the old bucket size
-    if is_erl_activated == 0 then
-        new_content = erl_bucket_size - bucket_size
-        -- save erl state
-        redis.call('SET', erlKey, '1')
-        redis.call('EXPIRE', erlKey, erl_activation_period_mins * 60)
-        is_erl_activated = 1 -- this will be returned to the caller, so we should set it
+    bucket_content_after_refill = calculateNewBucketContent(current, tokens_per_ms, bucket_size, current_timestamp_ms)
+end
+
+local enough_tokens = bucket_content_after_refill >= tokens_to_take
+local bucket_content_after_take = bucket_content_after_refill
+
+if enough_tokens then
+    if is_erl_activated == 1 then
+        bucket_content_after_take = math.min(bucket_content_after_refill - tokens_to_take, erl_bucket_size)
+    else
+        bucket_content_after_take = math.min(bucket_content_after_refill - tokens_to_take, bucket_size)
     end
-    enough_tokens = new_content >= tokens_to_take
-    if enough_tokens then
-        new_content = math.min(new_content - tokens_to_take, erl_bucket_size)
+else
+    -- if tokens are not enough, see if activating erl will help.
+    if is_erl_activated == 0 then
+        local used_tokens = bucket_size - bucket_content_after_refill
+        local bucket_content_after_erl_activation = erl_bucket_size - used_tokens
+        local enough_tokens_after_erl_activation = bucket_content_after_erl_activation >= tokens_to_take
+        if enough_tokens_after_erl_activation then
+            enough_tokens = enough_tokens_after_erl_activation -- we are returning this value, thus setting it
+            bucket_content_after_take = math.min(bucket_content_after_erl_activation - tokens_to_take, erl_bucket_size)
+            -- save erl state
+            redis.call('SET', erlKey, '1')
+            redis.call('EXPIRE', erlKey, erl_activation_period_mins * 60)
+            is_erl_activated = 1
+        end
     end
 end
 
 -- save bucket state
 redis.call('HMSET', lastBucketStateKey,
             'd', current_timestamp_ms,
-            'r', new_content)
+            'r', bucket_content_after_take)
 redis.call('EXPIRE', lastBucketStateKey, ttl)
 
 local reset_ms = 0
 if drip_interval > 0 then
-    reset_ms = math.ceil(current_timestamp_ms + (bucket_size - new_content) * drip_interval)
+    if is_erl_activated == 1 then
+        reset_ms = math.ceil(current_timestamp_ms + (erl_bucket_size - bucket_content_after_take) * drip_interval)
+    else
+        reset_ms = math.ceil(current_timestamp_ms + (bucket_size - bucket_content_after_take) * drip_interval)
+    end
 end
 
-return { new_content, enough_tokens, current_timestamp_ms, reset_ms, is_erl_activated }
+return { bucket_content_after_take, enough_tokens, current_timestamp_ms, reset_ms, is_erl_activated }
