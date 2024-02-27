@@ -38,7 +38,7 @@ const limitd = new Limitd({
 });
 ```
 
-Options available:
+### Options available:
 
 - `uri` (string): Redis Connection String.
 - `nodes` (array): [Redis Cluster Configuration](https://github.com/luin/ioredis#cluster).
@@ -46,26 +46,28 @@ Options available:
 - `prefix` (string): Prefix keys in Redis.
 - `ping` (object): Configure ping to Redis DB.
 
-Buckets:
+### Buckets:
 
 - `size` (number): is the maximum content of the bucket. This is the maximum burst you allow.
 - `per_interval` (number): is the amount of tokens that the bucket receive on every interval.
 - `interval` (number): defines the interval in milliseconds.
 - `unlimited` (boolean = false): unlimited requests (skip take).
 - `skip_n_calls` (number): take will go to redis every `n` calls instead of going in every take.
-- `elevated_limits` (object): elevated limits configuration that kick in when the bucket is empty. Consider it as an override that kick in when the bucket is empty.
-
-Ping:
-
-- `interval` (number): represents the time between two consecutive pings. Default: 3000.
-- `maxFailedAttempts` (number): is the allowed number of failed pings before declaring the connection as dead. Default: 5.
-- `reconnectIfFailed` (boolean): indicates whether we should try to reconnect is the connection is declared dead. Default: true.
+- `elevated_limits` (object): elevated limits configuration that kicks in when the bucket is empty. Please refer to the [ERL section](#ERL-Elevated-Rate-Limits) for more details.
 
 You can also define your rates using `per_second`, `per_minute`, `per_hour`, `per_day`. So `per_second: 1` is equivalent to `per_interval: 1, interval: 1000`.
 
 If you omit `size`, limitdb assumes that `size` is the value of `per_interval`. So `size: 10, per_second: 10` is the same than `per_second: 10`.
 
 If you don't specify a filling rate with `per_interval` or any other `per_x`, the bucket is fixed and you have to manually reset it using `PUT`.
+
+### Ping:
+
+- `interval` (number): represents the time between two consecutive pings. Default: 3000.
+- `maxFailedAttempts` (number): is the allowed number of failed pings before declaring the connection as dead. Default: 5.
+- `reconnectIfFailed` (boolean): indicates whether we should try to reconnect is the connection is declared dead. Default: true.
+
+
 
 ## Overrides
 You can also define `overrides` inside your type definitions as follows:
@@ -113,8 +115,14 @@ overrides: {
 
 ## ERL (Elevated Rate Limits)
 ERL is a feature that allows you to define a different set of limits that kick in when the bucket is empty.
-To be able to allow its use within limitd-redis, you need to set the `allowERL` to `true`
-You can configure elevated limits inside your type definitions as follows:
+The feature aims to provide a way to temporarily allow a higher rate of requests when the bucket is empty, for a limited period of time.
+
+To be able to allow its use within limitd-redis, you need to:
+1. call the `take` method with the parameter `allowERL` set to `true`.
+2. pass the `erlIsActiveKey` parameter with the identifier of the ERL activation for the bucket. This works similarly to the `key` you pass to `limitd.take`, which is the identifier of the bucket; however it's used to track the ERL activation for the bucket instead.
+3. make sure that the bucket definition has ERL configured.
+
+You can configure elevated limits inside your bucket definitions as follows:
 
 ```js
 buckets = {
@@ -123,8 +131,8 @@ buckets = {
     per_second: 5,
     elevated_limits: {
       size: 100, // new bucket size. already used tokens will be deducted from current bucket content upon ERL activation.
-      per_second: 50, // new bucket refill ate
-      erl_activation_period_mins: 5, // for how long the ERL configuration should remain active
+      per_second: 50, // new bucket refill rate. You can use all the other refill rate configurations defined above, such as per_minute, per_hour, per_interval etc.
+      erl_activation_period_seconds: 300, // for how long the ERL configuration should remain active once activated.
     }
   }
 }
@@ -137,7 +145,7 @@ buckets = {
 ## TAKE
 
 ```js
-limitd.take(type, key, [count], (err, result) => {
+limitd.take(type, key, [count], erlActiveKey, allowERL (err, result) => {
   console.log(result);
 });
 ```
@@ -149,7 +157,7 @@ limitd.take(type, key, [count], (err, result) => {
 -  `count`: the amount of tokens you need. This is optional and the default is 1.
 -  `configOverride`: caller-provided bucket configuration for this operation
 -  `erlIsActiveKey`: (string) the identifier of the ERL activation for the bucket. Must be passed for buckets that have ERL configured.
--  `allowERL`: (boolean = false) if set to true, the ERL feature will be allowed to be used. Default is false.
+-  `allowERL`: (boolean) optional. if set to true, the ERL feature will be allowed to be used.
 
 The result object has:
 -  `conformant` (boolean): true if the requested amount is conformant to the limit.
