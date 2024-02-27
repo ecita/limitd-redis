@@ -5,7 +5,7 @@ local ttl                         = tonumber(ARGV[4])
 local drip_interval               = tonumber(ARGV[5])
 local erl_tokens_per_ms           = tonumber(ARGV[6])
 local erl_bucket_size             = tonumber(ARGV[7])
-local erl_activation_period_mins  = tonumber(ARGV[8])
+local erl_activation_period_seconds  = tonumber(ARGV[8])
 
 -- the key to use for pulling last bucket state from redis
 local lastBucketStateKey = KEYS[1]
@@ -74,7 +74,7 @@ else
             bucket_content_after_take = math.min(bucket_content_after_erl_activation - tokens_to_take, erl_bucket_size)
             -- save erl state
             redis.call('SET', erlKey, '1')
-            redis.call('EXPIRE', erlKey, erl_activation_period_mins * 60)
+            redis.call('EXPIRE', erlKey, erl_activation_period_seconds)
             is_erl_activated = 1
         end
     end
