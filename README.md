@@ -145,7 +145,7 @@ buckets = {
 ## TAKE
 
 ```js
-limitd.take(type, key, [count], erlActiveKey, allowERL (err, result) => {
+limitd.take(type, key, { count, configOverride, erlIsActive, allowERL}, (err, result) => {
   console.log(result);
 });
 ```
@@ -156,7 +156,7 @@ limitd.take(type, key, [count], erlActiveKey, allowERL (err, result) => {
 -  `key`: the identifier of the bucket.
 -  `count`: the amount of tokens you need. This is optional and the default is 1.
 -  `configOverride`: caller-provided bucket configuration for this operation
--  `erlIsActiveKey`: (string) the identifier of the ERL activation for the bucket. Must be passed for buckets that have ERL configured.
+-  `erlIsActiveKey`: (string) the identifier of the ERL activation for the bucket. Only mandatory to pass while operating on buckets that have ERL configured.
 -  `allowERL`: (boolean) optional. if set to true, the ERL feature will be allowed to be used.
 
 The result object has:
