@@ -896,6 +896,53 @@ describe('LimitDBRedis', () => {
                 done();
               })
         });
+        it('should go back to standard bucket size and refill rate if allowERL is turned into false', (done) => {
+          const bucketName = 'test-bucket';
+          const params = {type: bucketName, key:  'some_key', erlIsActiveKey: 'some_erl_active_identifier', allowERL:true};
+          db.configurateBucket(bucketName, {
+              size: 1,
+              per_interval: 1,
+              interval: 2,
+              elevated_limits: {
+                  size: 5,
+                  per_interval: 1,
+                  interval: 5,
+              }
+          });
+
+          // first call to take a token
+          takeElevatedPromise(params)
+              // second call. erl activated and token taken. tokens in bucket: 3
+              .then(() => takeElevatedPromise(params))
+              // wait for 5ms, refill 1 token while erl active. tokens in bucket: 4
+              .then(() => new Promise((resolve) => setTimeout(resolve, 5)))
+              // take 1 token. tokens in bucket: 3
+              .then(() => takeElevatedPromise(params))
+              .then((result) => {
+                assert.isTrue(result.conformant);
+                assert.isTrue(result.erl_activated);
+                assert.equal(result.remaining, 3);
+              })
+              // disable ERL, go back to standard bucket size and refill rate
+              // tokens in bucket: 1 (= bucket size)
+              // take 1 token. tokens in bucket: 0
+              .then(() => takeElevatedPromise({...params, allowERL:false}))
+              .then((result) => {
+                  assert.isTrue(result.conformant);
+                  assert.notExists(result.erl_activated);
+                  assert.equal(result.remaining, 0);
+              })
+              // wait for 2ms, refill 1 token while erl inactive. tokens in bucket: 1
+              .then(() => new Promise((resolve) => setTimeout(resolve, 2)))
+              // take 1 token. tokens in bucket: 0
+              .then(() => takeElevatedPromise({...params, allowERL:false}))
+              .then((result) => {
+                assert.isTrue(result.conformant);
+                assert.notExists(result.erl_activated);
+                assert.equal(result.remaining, 0);
+                done();
+              })
+        });
       });
       describe('when allowERL is false', () => {
         it('should use normal rate limits regardless of erl configuration or erlIsActiveKey', async () => {
