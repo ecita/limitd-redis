@@ -676,6 +676,14 @@ describe('LimitDBRedis', () => {
 
     describe('elevated limits', () => {
       const takeElevatedPromise = (params) => new Promise((resolve, reject) => {
+        db.takeElevated(params, (err, response) => {
+          if (err) {
+            return reject(err);
+          }
+          resolve(response);
+        });
+      });
+      const takePromise = (params) => new Promise((resolve, reject) => {
         db.take(params, (err, response) => {
           if (err) {
             return reject(err);
@@ -725,34 +733,9 @@ describe('LimitDBRedis', () => {
             },
           })
 
-          db.take(params, (err) => {
+          db.takeElevated(params, (err) => {
             assert.match(err.message, /erlIsActiveKey is required for elevated limits/);
             done();
-          });
-        });
-        it('should rate limit according to default configuration if there is no erl configuration, regardless of erlIsActiveKey', async () => {
-          const bucketName = 'bucket_without_erl_config';
-          db.configurateBucket(bucketName, {
-            size: 2,
-            per_minute: 1,
-          })
-
-          await takeElevatedPromise({
-            type: bucketName,
-            key: 'some_bucket_key',
-            erlIsActiveKey: "some-key",
-            allowERL: true
-          }).then((result) => {
-            assert.isTrue(result.conformant);
-            assert.notExists(result.erl_activated);
-          });
-          await takeElevatedPromise({
-            type: bucketName,
-            key: 'some_bucket_key',
-            erlIsActiveKey: undefined
-          }).then((result) => {
-            assert.isTrue(result.conformant);
-            assert.notExists(result.erl_activated);
           });
         });
         it('should apply erl limits if normal rate limits are exceeded', async () => {
@@ -896,7 +879,7 @@ describe('LimitDBRedis', () => {
                 done();
               })
         });
-        it('should go back to standard bucket size and refill rate if allowERL is turned into false', (done) => {
+        it('should go back to standard bucket size and refill rate when we stop using takeElevated', (done) => {
           const bucketName = 'test-bucket';
           const params = {type: bucketName, key:  'some_key', erlIsActiveKey: 'some_erl_active_identifier', allowERL:true};
           db.configurateBucket(bucketName, {
@@ -926,7 +909,7 @@ describe('LimitDBRedis', () => {
               // disable ERL, go back to standard bucket size and refill rate
               // tokens in bucket: 1 (= bucket size)
               // take 1 token. tokens in bucket: 0
-              .then(() => takeElevatedPromise({...params, allowERL:false}))
+              .then(() => takePromise(params))
               .then((result) => {
                   assert.isTrue(result.conformant);
                   assert.notExists(result.erl_activated);
@@ -935,7 +918,7 @@ describe('LimitDBRedis', () => {
               // wait for 2ms, refill 1 token while erl inactive. tokens in bucket: 1
               .then(() => new Promise((resolve) => setTimeout(resolve, 2)))
               // take 1 token. tokens in bucket: 0
-              .then(() => takeElevatedPromise({...params, allowERL:false}))
+              .then(() => takePromise(params))
               .then((result) => {
                 assert.isTrue(result.conformant);
                 assert.notExists(result.erl_activated);
@@ -959,10 +942,10 @@ describe('LimitDBRedis', () => {
           const params ={type: bucketName, key: 'some_key', erlIsActiveKey:erlIsActiveKey, allowERL:false}
 
           // erl not activated yet
-          await takeElevatedPromise(params)
+          await takePromise(params)
 
           // erl is supposed to be activated, but will not be
-          await takeElevatedPromise(params).then((result) => {
+          await takePromise(params).then((result) => {
             assert.isFalse(result.conformant);
             assert.notExists(result.erl_activated);
           });
