@@ -1021,6 +1021,64 @@ describe('LimitDBRedis', () => {
           done();
         });
       })
+
+      describe('overrides', () => {
+        it('should use elevated_limits config override when provided', (done) => {
+          const bucketName = 'bucket_with_no_elevated_limits_config';
+          const erlIsActiveKey = 'some_erl_active_identifier';
+          db.configurateBucket(bucketName, {
+            size: 1,
+            per_minute: 1
+          })
+          const configOverride = { size: 1, elevated_limits: {size: 3, per_second: 3} };
+          const params = {type: bucketName, key: 'some_key', erlIsActiveKey: erlIsActiveKey, configOverride}
+          takeElevatedPromise(params)
+            .then((result) => {
+              assert.isTrue(result.conformant)
+              assert.isFalse(result.erl_activated)
+            })
+            .then(() => takeElevatedPromise(params))
+            .then(() => takeElevatedPromise(params))
+            .then((result) => {
+              assert.isTrue(result.conformant)
+              assert.isTrue(result.erl_activated)
+              assert.equal(result.remaining, 0)
+            })
+            .then(() => takeElevatedPromise(params))
+            .then((result) => {
+              assert.isFalse(result.conformant)
+              db.redis.ttl(erlIsActiveKey, (err, ttl) => {
+                assert.equal(ttl, ERL_DEFAULT_ACTIVATION_PERIOD_SECONDS); // uses default activation period
+                done()
+              })
+            })
+        });
+        it('should use erl_activation_period from elevated_limits config override when provided', (done) => {
+          const bucketName = 'bucket_with_no_elevated_limits_config';
+          const erlIsActiveKey = 'some_erl_active_identifier';
+          db.configurateBucket(bucketName, {
+            size: 1,
+            per_minute: 1,
+            erl_activation_period_seconds: 900
+          })
+          const configOverride = { size: 1, elevated_limits: {size: 3, per_second: 3, erl_activation_period_seconds: 60} };
+          const params = {type: bucketName, key: 'some_key', erlIsActiveKey: erlIsActiveKey, configOverride}
+          takeElevatedPromise(params)
+            .then((result) => {
+              assert.isTrue(result.conformant)
+              assert.isFalse(result.erl_activated)
+            })
+            .then(() => takeElevatedPromise(params))
+            .then((result) => {
+              assert.isTrue(result.conformant)
+              assert.isTrue(result.erl_activated)
+              db.redis.ttl(erlIsActiveKey, (err, ttl) => {
+                assert.equal(ttl, 60); // uses specified activation period
+                done()
+              })
+            })
+        });
+      })
     });
   });
 

@@ -118,7 +118,7 @@ ERL is a feature that allows you to define a different set of limits that kick i
 The feature aims to provide a way to temporarily allow a higher rate of requests when the bucket is empty, for a limited period of time.
 
 To be able to allow its use within limitd-redis, you need to:
-1. call the `take` method with the parameter `allowERL` set to `true`.
+1. call the `takeElevated` method.
 2. pass the `erlIsActiveKey` parameter with the identifier of the ERL activation for the bucket. This works similarly to the `key` you pass to `limitd.take`, which is the identifier of the bucket; however it's used to track the ERL activation for the bucket instead.
 3. make sure that the bucket definition has ERL configured.
 
@@ -138,6 +138,8 @@ buckets = {
 }
 ```
 
+The overrides in ERL work the same way as for the regular bucket. Both size and per_interval are mandatory when specifying an override. 
+
 ## Breaking changes from `Limitdb`
 
 * Elements will have a default TTL of a week unless specified otherwise.
@@ -156,8 +158,30 @@ limitd.take(type, key, { count, configOverride, erlIsActive, allowERL}, (err, re
 -  `key`: the identifier of the bucket.
 -  `count`: the amount of tokens you need. This is optional and the default is 1.
 -  `configOverride`: caller-provided bucket configuration for this operation
--  `erlIsActiveKey`: (string) the identifier of the ERL activation for the bucket. Only mandatory to pass while operating on buckets that have ERL configured.
--  `allowERL`: (boolean) optional. if set to true, the ERL feature will be allowed to be used.
+
+The result object has:
+-  `conformant` (boolean): true if the requested amount is conformant to the limit.
+-  `remaining` (int): the amount of remaining tokens in the bucket.
+-  `reset` (int / unix timestamp): unix timestamp of the date when the bucket will be full again.
+-  `limit` (int): the size of the bucket.
+
+## TAKEELEVATED
+
+This take operation allows the use of elevated rate limits if it corresponds.
+
+```js
+limitd.takeElevated(type, key, { count, configOverride, erlIsActive }, (err, result) => {
+  console.log(result);
+});
+```
+
+`limitd.takeElevated` takes the following arguments:
+
+-  `type`: the bucket type.
+-  `key`: the identifier of the bucket.
+-  `count`: the amount of tokens you need. This is optional and the default is 1.
+-  `configOverride`: caller-provided bucket configuration for this operation
+-  `erlIsActiveKey`: (string) the identifier of the ERL activation for the bucket.
 
 The result object has:
 -  `conformant` (boolean): true if the requested amount is conformant to the limit.
