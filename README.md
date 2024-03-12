@@ -147,7 +147,7 @@ The overrides in ERL work the same way as for the regular bucket. Both size and 
 ## TAKE
 
 ```js
-limitd.take(type, key, { count, configOverride, erlIsActive, allowERL}, (err, result) => {
+limitd.take(type, key, { count, configOverride }, (err, result) => {
   console.log(result);
 });
 ```
